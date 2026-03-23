@@ -1,0 +1,12 @@
+{
+  "name": "blackroad-screen-share",
+  "version": "1.0.0",
+  "description": "Sovereign screen sharing — pure WebRTC, no external services",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js --port 8803"
+  },
+  "license": "SEE LICENSE IN LICENSE",
+  "private": true
+}

@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BlackRoad Screen Share</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0a0a0a;
+    --surface: #141414;
+    --border: #2a2a2a;
+    --text: #e0e0e0;
+    --text-dim: #888;
+    --pink: #FF2255;
+    --green: #22cc66;
+  }
+
+  body {
+    font-family: system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  code, .mono { font-family: 'SF Mono', 'Fira Code', monospace; }
+
+  header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  header .dot {
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    background: var(--pink);
+    flex-shrink: 0;
+  }
+
+  header h1 {
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+  }
+
+  .status-bar {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+
+  .status-indicator {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--text-dim);
+    transition: background 0.3s;
+  }
+  .status-indicator.connected { background: var(--green); }
+  .status-indicator.sharing { background: var(--pink); animation: pulse 2s infinite; }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
+  main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 24px;
+    gap: 20px;
+    max-width: 1200px;
+    width: 100%;
+    margin: 0 auto;
+  }
+
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+  }
+
+  button {
+    font-family: system-ui, -apple-system, sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    padding: 10px 20px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+  }
+  button:hover { border-color: #444; background: #1a1a1a; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  button.primary {
+    background: var(--pink);
+    border-color: var(--pink);
+    color: #fff;
+  }
+  button.primary:hover { background: #e01e4d; }
+  button.primary:disabled { background: #661133; border-color: #661133; }
+
+  button.danger { border-color: #cc3333; color: #cc3333; }
+  button.danger:hover { background: #1a0a0a; }
+
+  .room-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 13px;
+  }
+
+  .room-info .room-id {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    color: var(--text);
+    letter-spacing: 1px;
+  }
+
+  .room-info button {
+    padding: 4px 12px;
+    font-size: 12px;
+  }
+
+  .video-area {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    min-height: 400px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .video-area .placeholder {
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  .placeholder .square {
+    width: 48px; height: 48px;
+    background: var(--pink);
+    border-radius: 4px;
+    margin: 0 auto 16px;
+    opacity: 0.6;
+  }
+
+  video {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    position: absolute;
+    top: 0; left: 0;
+  }
+
+  .info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+
+  .log {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 16px;
+    max-height: 160px;
+    overflow-y: auto;
+    line-height: 1.7;
+  }
+  .log .entry { color: var(--text-dim); }
+  .log .entry.error { color: #cc3333; }
+  .log .entry.success { color: var(--green); }
+  .log .entry .ts { color: #555; margin-right: 8px; }
+
+  @media (max-width: 640px) {
+    main { padding: 16px; }
+    .controls { flex-direction: column; align-items: stretch; }
+    .room-info { flex-wrap: wrap; }
+    .video-area { min-height: 250px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="dot"></div>
+  <h1>Screen Share</h1>
+  <div class="status-bar">
+    <div class="status-indicator" id="statusDot"></div>
+    <span id="statusText">Disconnected</span>
+  </div>
+</header>
+
+<main>
+  <div class="controls">
+    <button class="primary" id="btnShare" onclick="startSharing()">Share Screen</button>
+    <button id="btnWatch" onclick="watchScreen()">Watch</button>
+    <button id="btnRecord" onclick="toggleRecording()" disabled>Record</button>
+    <button class="danger" id="btnStop" onclick="stopSharing()" disabled>Stop</button>
+
+    <div class="room-info" id="roomInfo" style="display:none">
+      <span>Room:</span>
+      <span class="room-id" id="roomIdDisplay"></span>
+      <button onclick="copyRoomLink()">Copy Link</button>
+    </div>
+  </div>
+
+  <div class="video-area">
+    <div class="placeholder" id="placeholder">
+      <div class="square"></div>
+      <div>Click <strong>Share Screen</strong> to broadcast</div>
+      <div>or <strong>Watch</strong> to view a shared screen</div>
+    </div>
+    <video id="video" autoplay playsinline style="display:none"></video>
+  </div>
+
+  <div class="info-row">
+    <span id="resolution"></span>
+    <span id="peerCount"></span>
+  </div>
+
+  <div class="log" id="log"></div>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+
+let ws = null;
+let pc = null;
+let localStream = null;
+let mediaRecorder = null;
+let recordedChunks = [];
+let roomId = null;
+let myPeerId = null;
+let isHost = false;
+
+const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
+
+// Check URL for room param
+const urlParams = new URLSearchParams(location.search);
+if (urlParams.has('room')) {
+  roomId = urlParams.get('room');
+  $('roomIdDisplay').textContent = roomId;
+  $('roomInfo').style.display = 'flex';
+  log('Room from URL: ' + roomId);
+}
+
+function generateRoomId() {
+  const chars = 'abcdefghjkmnpqrstuvwxyz23456789';
+  let id = '';
+  for (let i = 0; i < 8; i++) id += chars[Math.floor(Math.random() * chars.length)];
+  return id;
+}
+
+function log(msg, type = '') {
+  const el = $('log');
+  const ts = new Date().toLocaleTimeString('en-US', { hour12: false });
+  const div = document.createElement('div');
+  div.className = 'entry' + (type ? ' ' + type : '');
+  div.innerHTML = `<span class="ts">${ts}</span>${msg}`;
+  el.appendChild(div);
+  el.scrollTop = el.scrollHeight;
+}
+
+function setStatus(text, cls = '') {
+  $('statusText').textContent = text;
+  $('statusDot').className = 'status-indicator' + (cls ? ' ' + cls : '');
+}
+
+function connectSignaling(room) {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const wsUrl = `${proto}//${location.host}/room/${room}`;
+  log('Connecting to signaling server...');
+
+  ws = new WebSocket(wsUrl);
+
+  ws.onopen = () => {
+    setStatus('Connected', 'connected');
+    log('Signaling connected', 'success');
+  };
+
+  ws.onclose = () => {
+    setStatus('Disconnected');
+    log('Signaling disconnected');
+  };
+
+  ws.onerror = () => {
+    log('WebSocket error', 'error');
+  };
+
+  ws.onmessage = async (ev) => {
+    const msg = JSON.parse(ev.data);
+
+    switch (msg.type) {
+      case 'room-info':
+        myPeerId = msg.peerId;
+        log(`Joined room ${msg.roomId} as ${myPeerId}`);
+        if (msg.peers.length > 0 && !isHost) {
+          // We are a viewer joining a room with an existing host
+          log(`Found ${msg.peers.length} peer(s) in room`);
+        }
+        $('peerCount').textContent = `Peers: ${msg.peers.length + 1}`;
+        break;
+
+      case 'peer-joined':
+        log(`Peer ${msg.peerId} joined`);
+        $('peerCount').textContent = `Peers: ${msg.peerCount}`;
+        if (isHost && localStream) {
+          // Host creates offer for new viewer
+          await createPeerConnection(msg.peerId, true);
+        }
+        break;
+
+      case 'peer-left':
+        log(`Peer ${msg.peerId} left`);
+        $('peerCount').textContent = `Peers: ${msg.peerCount}`;
+        break;
+
+      case 'offer':
+        log('Received offer from ' + msg.from);
+        await createPeerConnection(msg.from, false);
+        await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        ws.send(JSON.stringify({ type: 'answer', to: msg.from, sdp: pc.localDescription }));
+        break;
+
+      case 'answer':
+        log('Received answer from ' + msg.from);
+        if (pc) await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+        break;
+
+      case 'ice-candidate':
+        if (pc && msg.candidate) {
+          await pc.addIceCandidate(new RTCIceCandidate(msg.candidate)).catch(() => {});
+        }
+        break;
+    }
+  };
+}
+
+async function createPeerConnection(remotePeerId, createOffer) {
+  if (pc) { pc.close(); }
+
+  pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+
+  pc.onicecandidate = (ev) => {
+    if (ev.candidate && ws && ws.readyState === 1) {
+      ws.send(JSON.stringify({ type: 'ice-candidate', to: remotePeerId, candidate: ev.candidate }));
+    }
+  };
+
+  pc.oniceconnectionstatechange = () => {
+    log(`ICE: ${pc.iceConnectionState}`);
+    if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+      setStatus('Streaming', 'sharing');
+    }
+    if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
+      setStatus('Disconnected');
+    }
+  };
+
+  pc.ontrack = (ev) => {
+    log('Receiving remote stream', 'success');
+    const video = $('video');
+    video.srcObject = ev.streams[0];
+    video.style.display = 'block';
+    $('placeholder').style.display = 'none';
+    $('btnRecord').disabled = false;
+
+    ev.streams[0].getVideoTracks()[0].addEventListener('ended', () => {
+      log('Remote stream ended');
+      video.style.display = 'none';
+      $('placeholder').style.display = '';
+    });
+
+    updateResolution(video);
+  };
+
+  if (isHost && localStream) {
+    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+  }
+
+  if (createOffer) {
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    ws.send(JSON.stringify({ type: 'offer', to: remotePeerId, sdp: pc.localDescription }));
+    log('Sent offer to ' + remotePeerId);
+  }
+}
+
+async function startSharing() {
+  try {
+    localStream = await navigator.mediaDevices.getDisplayMedia({
+      video: { cursor: 'always' },
+      audio: true
+    });
+  } catch (e) {
+    log('Screen capture cancelled or denied', 'error');
+    return;
+  }
+
+  isHost = true;
+
+  const video = $('video');
+  video.srcObject = localStream;
+  video.style.display = 'block';
+  video.muted = true;
+  $('placeholder').style.display = 'none';
+
+  localStream.getVideoTracks()[0].addEventListener('ended', () => {
+    log('Screen sharing stopped by user');
+    stopSharing();
+  });
+
+  // Generate room if none
+  if (!roomId) {
+    roomId = generateRoomId();
+    const newUrl = `${location.origin}${location.pathname}?room=${roomId}`;
+    history.replaceState(null, '', newUrl);
+  }
+
+  $('roomIdDisplay').textContent = roomId;
+  $('roomInfo').style.display = 'flex';
+  $('btnShare').disabled = true;
+  $('btnStop').disabled = false;
+  $('btnRecord').disabled = false;
+
+  updateResolution(video);
+  connectSignaling(roomId);
+  setStatus('Sharing', 'sharing');
+  log('Screen sharing started', 'success');
+}
+
+function watchScreen() {
+  if (!roomId) {
+    const input = prompt('Enter room ID:');
+    if (!input) return;
+    roomId = input.trim();
+    const newUrl = `${location.origin}${location.pathname}?room=${roomId}`;
+    history.replaceState(null, '', newUrl);
+  }
+
+  isHost = false;
+  $('roomIdDisplay').textContent = roomId;
+  $('roomInfo').style.display = 'flex';
+  $('btnWatch').disabled = true;
+  $('btnStop').disabled = false;
+
+  connectSignaling(roomId);
+  log('Watching room ' + roomId);
+
+  // Request the host to send an offer
+  setTimeout(() => {
+    if (ws && ws.readyState === 1) {
+      ws.send(JSON.stringify({ type: 'request-offer' }));
+    }
+  }, 500);
+}
+
+function stopSharing() {
+  if (localStream) {
+    localStream.getTracks().forEach(t => t.stop());
+    localStream = null;
+  }
+  if (pc) { pc.close(); pc = null; }
+  if (ws) { ws.close(); ws = null; }
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    mediaRecorder.stop();
+  }
+
+  $('video').style.display = 'none';
+  $('video').srcObject = null;
+  $('placeholder').style.display = '';
+  $('btnShare').disabled = false;
+  $('btnWatch').disabled = false;
+  $('btnStop').disabled = true;
+  $('btnRecord').disabled = true;
+  $('resolution').textContent = '';
+
+  setStatus('Disconnected');
+  log('Stopped');
+  isHost = false;
+}
+
+function toggleRecording() {
+  const btn = $('btnRecord');
+
+  if (mediaRecorder && mediaRecorder.state === 'recording') {
+    mediaRecorder.stop();
+    btn.textContent = 'Record';
+    btn.classList.remove('danger');
+    log('Recording stopped');
+    return;
+  }
+
+  const video = $('video');
+  const stream = video.srcObject;
+  if (!stream) { log('No stream to record', 'error'); return; }
+
+  recordedChunks = [];
+  mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9' });
+
+  mediaRecorder.ondataavailable = (ev) => {
+    if (ev.data.size > 0) recordedChunks.push(ev.data);
+  };
+
+  mediaRecorder.onstop = () => {
+    const blob = new Blob(recordedChunks, { type: 'video/webm' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const ts = new Date().toISOString().replace(/[:.]/g, '-');
+    a.href = url;
+    a.download = `screen-recording-${ts}.webm`;
+    a.click();
+    URL.revokeObjectURL(url);
+    log('Recording saved as WebM', 'success');
+  };
+
+  mediaRecorder.start(1000);
+  btn.textContent = 'Stop Recording';
+  btn.classList.add('danger');
+  log('Recording started', 'success');
+}
+
+function copyRoomLink() {
+  const link = `${location.origin}${location.pathname}?room=${roomId}`;
+  navigator.clipboard.writeText(link).then(() => {
+    log('Room link copied to clipboard', 'success');
+  }).catch(() => {
+    // Fallback
+    prompt('Copy this link:', link);
+  });
+}
+
+function updateResolution(video) {
+  setTimeout(() => {
+    if (video.videoWidth) {
+      $('resolution').textContent = `${video.videoWidth} x ${video.videoHeight}`;
+    }
+  }, 1000);
+}
+</script>
+</body>
+</html>
